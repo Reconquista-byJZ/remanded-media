@@ -1,0 +1,44 @@
+name: Publish media
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["publish.trigger"]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build site
+        run: |
+          mkdir -p site
+          touch site/.nojekyll
+          for d in ep*/; do
+            [ -d "$d" ] || continue
+            mkdir -p "site/$d"
+            for f in "$d"*; do
+              case "$f" in
+                *.part00) out="site/${f%.part00}"; cat "${f%.part00}".part* > "$out"
+                          [ -f "${f%.part00}.sha256" ] && echo "$(cat "${f%.part00}.sha256")  $out" | sha256sum -c - ;;
+                *.part*|*.sha256) ;;
+                *) cp "$f" "site/$f" ;;
+              esac
+            done
+          done
+          echo "<!doctype html><title>remanded-media</title>" > site/index.html
+          find site -type f -printf '%s %p\n'
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
